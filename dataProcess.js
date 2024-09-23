@@ -1,8 +1,23 @@
 const canvas = document.getElementById("renderCanvas");
 const engine = new BABYLON.Engine(canvas, true);
 const scene = new BABYLON.Scene(engine);
-var camera = new BABYLON.ArcRotateCamera("camera1", Math.PI / 2, Math.PI / 4, 10, BABYLON.Vector3.Zero(), scene);
+
+// Create a FreeCamera
+var camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(10, 10, -10), scene);
+camera.setTarget(new BABYLON.Vector3(0, 0, 45));
 camera.attachControl(canvas, true);
+
+// Set up camera controls
+camera.keysUp.push(87);    // W
+camera.keysDown.push(83);  // S
+camera.keysLeft.push(65);  // A
+camera.keysRight.push(68); // D
+camera.keysUpward.push(81);  // Q 
+camera.keysDownward.push(69);  // E 
+
+camera.speed = 0.3;
+camera.minZ = 1.0;
+
 const light = new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(0, 1, 0), scene);
 
 document.getElementById("csvFileInput").addEventListener("change", async function(event) {
@@ -51,7 +66,9 @@ document.getElementById("csvFileInput").addEventListener("change", async functio
         allBoxPlotValues.push({ group: Group, values: boxPLotvalues });
     }
 
-    function connectPoints(points, scene, color) {
+    const groupMeshes = {};
+
+    function connectPoints(points, scene, color, group) {
         let diamondLines = [];
         let whiskerLines = [];
         for (let i = 0; i < points.length; i++) {
@@ -68,34 +85,49 @@ document.getElementById("csvFileInput").addEventListener("change", async functio
                 [points[i][2], points[i][6]], // Bottom whisker
                 [points[i][3], points[i][7]]  // Top whisker
             );
-            let outerlineSystem = BABYLON.MeshBuilder.CreateLineSystem(`outerlines${i}`, { lines: whiskerLines }, scene);
-            let innerLineSystem = BABYLON.MeshBuilder.CreateLineSystem(`innerlines${i}`, { lines: diamondLines }, scene);
-            innerLineSystem.color = color;
-            outerlineSystem.color = color;
         }
+        let allLines = [...diamondLines, ...whiskerLines];
+        let LineSystem = BABYLON.MeshBuilder.CreateLineSystem(`lines_${group}`, { lines: allLines }, scene);
+        LineSystem.color = color;
+
         var paths = diamondLines.map(line => line.flat());
-        var ribbon = BABYLON.Mesh.CreateRibbon("ribbon", paths, false, false, 0, scene);
-        const ribbonMaterial = new BABYLON.StandardMaterial("ribbonMaterial", scene);
+        var ribbon = BABYLON.Mesh.CreateRibbon(`ribbon_${group}`, paths, false, false, 0, scene);
+        const ribbonMaterial = new BABYLON.StandardMaterial(`ribbonMaterial_${group}`, scene);
         ribbonMaterial.diffuseColor = color;
         ribbon.material = ribbonMaterial;
+
+        groupMeshes[group] = { LineSystem, ribbon };
     }
 
     const colors = {
         "Control": new BABYLON.Color3(1, 0, 0), // Red
-        "Low Dose": new BABYLON.Color3(0, 1, 0), // Green
-        "High Dose": new BABYLON.Color3(0, 0, 1) // Blue
+        "High Dose": new BABYLON.Color3(0, 1, 0), // Green
+        "Low Dose": new BABYLON.Color3(0, 0, 1) // Blue
     };
 
     allBoxPlotValues.forEach(groupData => {
-        connectPoints(groupData.values, scene, colors[groupData.group]);
+        connectPoints(groupData.values, scene, colors[groupData.group], groupData.group);
     });
 
-    const axesViewer = new BABYLON.AxesViewer(scene, 60);
+    function toggleVisibility(group) {
+        const meshes = groupMeshes[group];
+        if (meshes) {
+            meshes.LineSystem.isVisible = !meshes.LineSystem.isVisible;
+            meshes.ribbon.isVisible = !meshes.ribbon.isVisible;
+        }
+    }
+    //toggling visibility of groups
+    window.addEventListener("keydown", function(event) {
+        const groupIndex = parseInt(event.key) - 1;
+        if (groupIndex >= 0 && groupIndex < Groups.length) {
+            toggleVisibility(Groups[groupIndex]);
+        }
+    });
+    //scene.debugLayer.show();
     engine.runRenderLoop(function() {
         scene.render();
     });
     window.addEventListener("resize", function() {
         engine.resize();
     });
-    //cene.debugLayer.show();
 });
