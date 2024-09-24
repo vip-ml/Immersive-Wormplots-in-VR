@@ -24,7 +24,8 @@ document.getElementById("csvFileInput").addEventListener("change", async functio
     df = await dfd.readCSV(event.target.files[0]);
     document.getElementById("csvFileInput").style.display = 'none';
     canvas.style.display = 'block';
-    const Groups = ["Control", "Low Dose", "High Dose"];
+    //const Groups = ["Control", "Low Dose", "High Dose"];
+    const Groups  = df["Group"].unique().values;
     const Attribute1 = "Daphnia_Large";
     const Attribute2 = "Daphnia_Small";
 
@@ -37,12 +38,11 @@ document.getElementById("csvFileInput").addEventListener("change", async functio
         let intermediate = {};
         let [min, Q1, median, Q3, IQR, max] = [[], [], [], [], [], []];
         let boxPLotvalues = [];
-        let i;
 
         for (let timeStamp of filteredDf["Time"].unique().values) {
             Attrnames.forEach((Attrname, i) => intermediate[i] = groupedDf.getGroup([timeStamp])[Attrname].values);
 
-            for (i = 0; i < 2; i++) {
+            for (let i = 0; i < 2; i++) {
                 Q1[i] = math.quantileSeq(intermediate[i], 0.25);
                 median[i] = math.quantileSeq(intermediate[i], 0.5);
                 Q3[i] = math.quantileSeq(intermediate[i], 0.75);
@@ -94,6 +94,8 @@ document.getElementById("csvFileInput").addEventListener("change", async functio
         var ribbon = BABYLON.Mesh.CreateRibbon(`ribbon_${group}`, paths, false, false, 0, scene);
         const ribbonMaterial = new BABYLON.StandardMaterial(`ribbonMaterial_${group}`, scene);
         ribbonMaterial.diffuseColor = color;
+        ribbonMaterial.backFaceCulling = false;
+        //ribbonMaterial.emmisiveColor = color;
         ribbon.material = ribbonMaterial;
 
         groupMeshes[group] = { LineSystem, ribbon };
@@ -114,6 +116,8 @@ document.getElementById("csvFileInput").addEventListener("change", async functio
         if (meshes) {
             meshes.LineSystem.isVisible = !meshes.LineSystem.isVisible;
             meshes.ribbon.isVisible = !meshes.ribbon.isVisible;
+            //meshes.LineSystem.scaling = new BABYLON.Vector3(5, 5, 5);
+            //meshes.ribbon.scaling = new BABYLON.Vector(5, 5, 5);
         }
     }
     //toggling visibility of groups
@@ -123,7 +127,7 @@ document.getElementById("csvFileInput").addEventListener("change", async functio
             toggleVisibility(Groups[groupIndex]);
         }
     });
-    //scene.debugLayer.show();
+    scene.debugLayer.show();
     engine.runRenderLoop(function() {
         scene.render();
     });
