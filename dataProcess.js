@@ -18,6 +18,14 @@ camera.keysDownward.push(69);  // E
 camera.speed = 0.3;
 camera.minZ = 1.0;
 
+
+// Add a floor to the scene
+const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 100, height: 100 }, scene);
+const groundMaterial = new BABYLON.StandardMaterial("groundMaterial", scene);
+groundMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1); // White color
+ground.material = groundMaterial;
+ground.position = new BABYLON.Vector3(0, 3, 45); // Slightly below the visualization
+
 const light = new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(0, 1, 0), scene);
 
 document.getElementById("csvFileInput").addEventListener("change", async function(event) {
@@ -127,7 +135,7 @@ document.getElementById("csvFileInput").addEventListener("change", async functio
             toggleVisibility(Groups[groupIndex]);
         }
     });
-    scene.debugLayer.show();
+    //scene.debugLayer.show();
     engine.runRenderLoop(function() {
         scene.render();
     });
