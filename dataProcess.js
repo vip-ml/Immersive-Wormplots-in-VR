@@ -1,3 +1,4 @@
+
 async function initializeScene() {
     // Create the engine and the scene
     const canvas = document.getElementById("renderCanvas");
@@ -23,10 +24,21 @@ async function initializeScene() {
         floorMeshes: [ground]
     });
 
+    // Variables for scaling and interaction
+    let leftController, rightController;
+    let initialDistance = null;
+    let initialScale = null;
+    let isScaling = false;
+    let pickedMesh = null;
+    let originalParent = null;
+
+    const groupMeshes = {};
+
     document.getElementById("csvFileInput").addEventListener("change", async function(event) {
         df = await dfd.readCSV(event.target.files[0]);
         document.getElementById("csvFileInput").style.display = 'none';
         canvas.style.display = 'block';
+
         const Groups = df["Group"].unique().values;
         const Attribute1 = "Daphnia_Large";
         const Attribute2 = "Daphnia_Small";
@@ -43,7 +55,6 @@ async function initializeScene() {
 
             for (let timeStamp of filteredDf["Time"].unique().values) {
                 Attrnames.forEach((Attrname, i) => intermediate[i] = groupedDf.getGroup([timeStamp])[Attrname].values);
-
                 for (let i = 0; i < 2; i++) {
                     Q1[i] = math.quantileSeq(intermediate[i], 0.25);
                     median[i] = math.quantileSeq(intermediate[i], 0.5);
@@ -68,7 +79,6 @@ async function initializeScene() {
             allBoxPlotValues.push({ group: Group, values: boxPLotvalues });
         }
 
-        const groupMeshes = {};
         function connectPoints(points, scene, color, group) {
             let diamondLines = [];
             let whiskerLines = [];
@@ -87,6 +97,7 @@ async function initializeScene() {
                     [points[i][3], points[i][7]]  // Top whisker
                 );
             }
+
             let allLines = [...diamondLines, ...whiskerLines];
             let LineSystem = BABYLON.MeshBuilder.CreateLineSystem(`lines_${group}`, { lines: allLines }, scene);
             LineSystem.color = color;
@@ -95,8 +106,6 @@ async function initializeScene() {
             var ribbon = BABYLON.Mesh.CreateRibbon(`ribbon_${group}`, paths, false, false, 0, scene);
             const ribbonMaterial = new BABYLON.StandardMaterial(`ribbonMaterial_${group}`, scene);
             ribbonMaterial.diffuseColor = color;
-            //ribbonMaterial.emissiveColor = color; // Make the ribbon emissive
-            //ribbonMaterial.emissiveIntensity = 0.2;
             ribbonMaterial.backFaceCulling = false;
             ribbon.material = ribbonMaterial;
 
@@ -136,23 +145,26 @@ async function initializeScene() {
             }
         });
 
-        let mesh;
-
         xrHelper.input.onControllerAddedObservable.add((controller) => {
             controller.onMotionControllerInitObservable.add((motionController) => {
+                const xr_ids = motionController.getComponentIds();
+                let triggerComponent = motionController.getComponent(xr_ids[0]); // xr-standard-trigger
+                let squeezeComponent = motionController.getComponent(xr_ids[1]); // xr-standard-squeeze
+
                 if (motionController.handness === 'left') {
-                    const xr_ids = motionController.getComponentIds();
-                    let triggerComponent = motionController.getComponent(xr_ids[0]); // xr-standard-trigger
-                    triggerComponent.onButtonStateChangedObservable.add(() => {
-                        if (triggerComponent.changes.pressed) {
-                            // is it pressed?
-                            if (triggerComponent.pressed) {
+                    leftController = controller;
+                } else if (motionController.handness === 'right') {
+                    rightController = controller;
+                }
+
+                triggerComponent.onButtonStateChangedObservable.add(() => {
+                    if (triggerComponent.changes.pressed) {
+                        if (triggerComponent.pressed) {
+                            if (motionController.handness === 'left') {
                                 let mesh = scene.meshUnderPointer;
-                                console.log(mesh && mesh.name);
                                 if (xrHelper.pointerSelection.getMeshUnderPointer) {
                                     mesh = xrHelper.pointerSelection.getMeshUnderPointer(controller.uniqueId);
                                 }
-                                console.log(mesh && mesh.name);
                                 if (mesh === ground) {
                                     return;
                                 }
@@ -166,26 +178,67 @@ async function initializeScene() {
                                     originalParent = pickedMesh.parent;
                                     pickedMesh.setParent(motionController.rootMesh);
                                 }
-                            } else {
-                                if (pickedMesh) {
-                                    pickedMesh.setParent(originalParent);
-                                    pickedMesh = null;
-                                }
+                            }
+                        } else {
+                            if (pickedMesh) {
+                                pickedMesh.setParent(originalParent);
+                                pickedMesh = null;
                             }
                         }
-                    });
-                }
+                    }
+                });
+
+                squeezeComponent.onButtonStateChangedObservable.add(() => {
+                    if (squeezeComponent.changes.pressed) {
+                        if (squeezeComponent.pressed) {
+                            if (leftController && rightController && pickedMesh) {
+                                startScaling();
+                            }
+                        } else {
+                            stopScaling();
+                        }
+                    }
+                });
             });
         });
-        //scene.debugLayer.show();
-        engine.runRenderLoop(function() {
-            scene.render();
-        });
-        window.addEventListener("resize", function() {
-            engine.resize();
+
+        function startScaling() {
+            if (leftController && rightController && pickedMesh) {
+                const leftPosition = leftController.grip.position;
+                const rightPosition = rightController.grip.position;
+                initialDistance = BABYLON.Vector3.Distance(leftPosition, rightPosition);
+                initialScale = pickedMesh.scaling.clone();
+                isScaling = true;
+            }
+        }
+
+        function stopScaling() {
+            isScaling = false;
+            initialDistance = null;
+            initialScale = null;
+        }
+
+        scene.onBeforeRenderObservable.add(() => {
+            if (isScaling && leftController && rightController && pickedMesh) {
+                const leftPosition = leftController.grip.position;
+                const rightPosition = rightController.grip.position;
+                const currentDistance = BABYLON.Vector3.Distance(leftPosition, rightPosition);
+                
+                if (initialDistance && initialScale) {
+                    const scaleFactor = currentDistance / initialDistance;
+                    pickedMesh.scaling = initialScale.multiply(new BABYLON.Vector3(scaleFactor, scaleFactor, scaleFactor));
+                }
+            }
         });
     });
-   
+
+    engine.runRenderLoop(function() {
+        scene.render();
+    });
+
+    window.addEventListener("resize", function() {
+        engine.resize();
+    });
 }
 
 // Call the async function to initialize the scene
