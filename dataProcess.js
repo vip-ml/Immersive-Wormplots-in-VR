@@ -6,7 +6,7 @@ async function initializeScene() {
     const scene = new BABYLON.Scene(engine);
 
     // Create a UniversalCamera
-    var camera = new BABYLON.UniversalCamera("camera1", new BABYLON.Vector3(-60, 10, 45), scene);
+    var camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(-60, 10, 45), scene);
     camera.setTarget(new BABYLON.Vector3(0, 0, 45));
     camera.attachControl(canvas, true);
 
@@ -16,6 +16,7 @@ async function initializeScene() {
     groundMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1); // White color
     ground.material = groundMaterial;
     ground.position = new BABYLON.Vector3(0, 3, 45); // Slightly below the visualization
+    
 
     const light = new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(0, 10, 0), scene);
 
@@ -38,22 +39,23 @@ async function initializeScene() {
         df = await dfd.readCSV(event.target.files[0]);
         document.getElementById("csvFileInput").style.display = 'none';
         canvas.style.display = 'block';
-
-        const Groups = df["Group"].unique().values;
+        const wormName = "Group";
+        const TimeAttribute = "Time";
+        const Groups = df[wormName].unique().values;
         const Attribute1 = "Daphnia_Large";
         const Attribute2 = "Daphnia_Small";
 
         let allBoxPlotValues = [];
 
         for (let Group of Groups) {
-            let filteredDf = df.loc({ rows: df["Group"].eq(Group), columns: ["Time", Attribute1, Attribute2] });
-            let groupedDf = filteredDf.groupby(["Time"]);
+            let filteredDf = df.loc({ rows: df[wormName].eq(Group), columns: [TimeAttribute, Attribute1, Attribute2] });
+            let groupedDf = filteredDf.groupby([TimeAttribute]);
             let Attrnames = [Attribute1, Attribute2];
             let intermediate = {};
             let [min, Q1, median, Q3, IQR, max] = [[], [], [], [], [], []];
             let boxPLotvalues = [];
 
-            for (let timeStamp of filteredDf["Time"].unique().values) {
+            for (let timeStamp of filteredDf[TimeAttribute].unique().values) {
                 Attrnames.forEach((Attrname, i) => intermediate[i] = groupedDf.getGroup([timeStamp])[Attrname].values);
                 for (let i = 0; i < 2; i++) {
                     Q1[i] = math.quantileSeq(intermediate[i], 0.25);
