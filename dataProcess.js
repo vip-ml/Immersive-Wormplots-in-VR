@@ -1,49 +1,58 @@
 
 async function initializeScene() {
-    // Create the engine and the scene
     const canvas = document.getElementById("renderCanvas");
     const engine = new BABYLON.Engine(canvas, true);
     const scene = new BABYLON.Scene(engine);
 
-    // Create a UniversalCamera
     var camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(-60, 10, 45), scene);
     camera.setTarget(new BABYLON.Vector3(0, 0, 45));
     camera.attachControl(canvas, true);
 
-    // Add a floor to the scene
     const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 100, height: 100 }, scene);
     const groundMaterial = new BABYLON.StandardMaterial("groundMaterial", scene);
-    groundMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1); // White color
+    groundMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
     ground.material = groundMaterial;
-    ground.position = new BABYLON.Vector3(0, 3, 45); // Slightly below the visualization
-    
+    ground.position = new BABYLON.Vector3(0, 0, 45);
 
     const light = new BABYLON.HemisphericLight("light1", new BABYLON.Vector3(0, 10, 0), scene);
 
-    // Set up WebXR experience
     const xrHelper = await scene.createDefaultXRExperienceAsync({
         floorMeshes: [ground]
     });
 
-    // Variables for scaling and interaction
     let leftController, rightController;
     let initialDistance = null;
     let initialScale = null;
     let isScaling = false;
     let pickedMesh = null;
     let originalParent = null;
-
     const groupMeshes = {};
+
+    // Create the 3D UI manager
+    const manager = new BABYLON.GUI.GUI3DManager(scene);
+
+    // Create plane panel
+    const panel = new BABYLON.GUI.PlanePanel();
+    panel.margin = 0.02;
+    manager.addControl(panel);
+
+    // Set panel dimensions
+    panel.scaling = new BABYLON.Vector3(0.3, 0.3, 0.3);
+
+    // Create an anchor for the panel
+    const anchor = new BABYLON.TransformNode("panelAnchor");
+    panel.linkToTransformNode(anchor);
 
     document.getElementById("csvFileInput").addEventListener("change", async function(event) {
         df = await dfd.readCSV(event.target.files[0]);
         document.getElementById("csvFileInput").style.display = 'none';
         canvas.style.display = 'block';
-        const wormName = "Group";
-        const TimeAttribute = "Time";
+
+        const wormName = "city_name";
+        const TimeAttribute = "time_int";
         const Groups = df[wormName].unique().values;
-        const Attribute1 = "Daphnia_Large";
-        const Attribute2 = "Daphnia_Small";
+        const Attribute1 = "tmin";
+        const Attribute2 = "tmax";
 
         let allBoxPlotValues = [];
 
@@ -93,17 +102,16 @@ async function initializeScene() {
                 ];
                 diamondLines.push(diamond);
                 whiskerLines.push(
-                    [points[i][0], points[i][4]], // Left whisker
-                    [points[i][1], points[i][5]], // Right whisker
-                    [points[i][2], points[i][6]], // Bottom whisker
-                    [points[i][3], points[i][7]]  // Top whisker
+                    [points[i][0], points[i][4]],
+                    [points[i][1], points[i][5]],
+                    [points[i][2], points[i][6]],
+                    [points[i][3], points[i][7]]
                 );
             }
 
             let allLines = [...diamondLines, ...whiskerLines];
             let LineSystem = BABYLON.MeshBuilder.CreateLineSystem(`lines_${group}`, { lines: allLines }, scene);
             LineSystem.color = color;
-
             var paths = diamondLines.map(line => line.flat());
             var ribbon = BABYLON.Mesh.CreateRibbon(`ribbon_${group}`, paths, false, false, 0, scene);
             const ribbonMaterial = new BABYLON.StandardMaterial(`ribbonMaterial_${group}`, scene);
@@ -111,24 +119,12 @@ async function initializeScene() {
             ribbonMaterial.backFaceCulling = false;
             ribbon.material = ribbonMaterial;
 
-            // Create a parent TransformNode
             const parentNode = new BABYLON.TransformNode(`parent_${group}`, scene);
             LineSystem.parent = parentNode;
             ribbon.parent = parentNode;
-
             groupMeshes[group] = { parentNode, LineSystem, ribbon };
         }
 
-        // const colors = {
-        //     "Control": new BABYLON.Color3(1, 0, 0), // Red
-        //     "High Dose": new BABYLON.Color3(0, 1, 0), // Green
-        //     "Low Dose": new BABYLON.Color3(0, 0, 1) // Blue
-        // };
-
-
-
-
-        // Function to generate a random color
         function getRandomColor() {
             return new BABYLON.Color3(
                 Math.random(),
@@ -137,15 +133,10 @@ async function initializeScene() {
             );
         }
 
-        // Create a color map for all groups
         const colors = {};
         Groups.forEach(group => {
             colors[group] = getRandomColor();
         });
-
-
-
-
 
         allBoxPlotValues.forEach(groupData => {
             connectPoints(groupData.values, scene, colors[groupData.group], groupData.group);
@@ -159,69 +150,103 @@ async function initializeScene() {
             }
         }
 
-        // window.addEventListener("keydown", function(event) {
-        //     if (event.key === "1") {
-        //         toggleVisibility("Control");
-        //     } else if (event.key === "2") {
-        //         toggleVisibility("Low Dose");
-        //     } else if (event.key === "3") {
-        //         toggleVisibility("High Dose");
-        //     }
-        // });
-        
-        
-        const maxGroups = Math.min(Groups.length, 10);
+        // Add buttons to the panel
+        const addButton = function(group, color) {
+            const button = new BABYLON.GUI.HolographicButton("button_" + group);
+            button.width = "0.15";
+            button.height = "0.15";
+            panel.addControl(button);
+            button.text = group;
+            const buttonMaterial = new BABYLON.StandardMaterial("buttonColor_" + group, scene);
+            buttonMaterial.diffuseColor = color;
+            button.mesh.material = buttonMaterial;
+            button.onPointerUpObservable.add(() => {
+                toggleVisibility(group);
+            });
+        }
 
-        window.addEventListener("keydown", function(event) {
-            const keyNumber = parseInt(event.key);
-            if (!isNaN(keyNumber) && keyNumber >= 0 && keyNumber < maxGroups) {
-                const groupToToggle = Groups[keyNumber];
-                toggleVisibility(groupToToggle);
-            }
+        Groups.forEach(group => {
+            addButton(group, colors[group]);
         });
+
+        // Function to update panel position
+        const updatePanelPosition = () => {
+            const xrCamera = xrHelper.baseExperience.camera;
+            const forward = xrCamera.getDirection(BABYLON.Vector3.Forward());
+            anchor.position = xrCamera.position.add(forward.scale(2));
+            anchor.lookAt(xrCamera.position, 0, Math.PI, Math.PI);
+        };
+
+        // Toggle panel visibility and interactivity
+        let isPanelVisible = true;
+        updatePanelPosition();
+
+
 
         xrHelper.input.onControllerAddedObservable.add((controller) => {
             controller.onMotionControllerInitObservable.add((motionController) => {
                 const xr_ids = motionController.getComponentIds();
-                let triggerComponent = motionController.getComponent(xr_ids[0]); // xr-standard-trigger
-                let squeezeComponent = motionController.getComponent(xr_ids[1]); // xr-standard-squeeze
+                let triggerComponent = motionController.getComponent(xr_ids[0]);
+                let squeezeComponent = motionController.getComponent(xr_ids[1]);
 
                 if (motionController.handness === 'left') {
                     leftController = controller;
-                } else if (motionController.handness === 'right') {
-                    rightController = controller;
-                }
-
-                triggerComponent.onButtonStateChangedObservable.add(() => {
-                    if (triggerComponent.changes.pressed) {
-                        if (triggerComponent.pressed) {
-                            if (motionController.handness === 'left') {
-                                let mesh = scene.meshUnderPointer;
-                                if (xrHelper.pointerSelection.getMeshUnderPointer) {
-                                    mesh = xrHelper.pointerSelection.getMeshUnderPointer(controller.uniqueId);
+                    squeezeComponent.onButtonStateChangedObservable.add(() => {
+                        if (squeezeComponent.changes.pressed) {
+                            if (squeezeComponent.pressed) {
+                                isPanelVisible = !isPanelVisible;
+                                if (isPanelVisible) {
+                                    updatePanelPosition();
                                 }
-                                if (mesh === ground) {
-                                    return;
-                                }
-                                const group = Object.keys(groupMeshes).find(group =>
-                                    groupMeshes[group].parentNode === mesh ||
-                                    groupMeshes[group].LineSystem === mesh ||
-                                    groupMeshes[group].ribbon === mesh
-                                );
-                                if (group) {
-                                    pickedMesh = groupMeshes[group].parentNode;
-                                    originalParent = pickedMesh.parent;
-                                    pickedMesh.setParent(motionController.rootMesh);
-                                }
-                            }
-                        } else {
-                            if (pickedMesh) {
-                                pickedMesh.setParent(originalParent);
-                                pickedMesh = null;
+                                panel.isVisible = isPanelVisible;
+                                panel.children.forEach(button => {
+                                    button.isVisible = isPanelVisible;
+                                    button.isPickable = isPanelVisible;
+                                });
                             }
                         }
-                    }
-                });
+                    });
+                } else if (motionController.handness === 'right') {
+                    rightController = controller;
+                    triggerComponent.onButtonStateChangedObservable.add(() => {
+                        if (triggerComponent.changes.pressed) {
+                            if (triggerComponent.pressed) {
+                                if (!isPanelVisible) {
+                                    const ray = controller.getWorldPointerRayToRef(new BABYLON.Ray());
+                                    const hit = scene.pickWithRay(ray);
+                                    if (hit.pickedMesh && hit.pickedMesh.parent instanceof BABYLON.GUI.HolographicButton) {
+                                        const button = hit.pickedMesh.parent;
+                                        console.log("Button selected:", button.text);
+                                        toggleVisibility(button.text);
+                                    }
+                                } else {
+                                    let mesh = scene.meshUnderPointer;
+                                    if (xrHelper.pointerSelection.getMeshUnderPointer) {
+                                        mesh = xrHelper.pointerSelection.getMeshUnderPointer(controller.uniqueId);
+                                    }
+                                    if (mesh === ground) {
+                                        return;
+                                    }
+                                    const group = Object.keys(groupMeshes).find(group =>
+                                        groupMeshes[group].parentNode === mesh ||
+                                        groupMeshes[group].LineSystem === mesh ||
+                                        groupMeshes[group].ribbon === mesh
+                                    );
+                                    if (group) {
+                                        pickedMesh = groupMeshes[group].parentNode;
+                                        originalParent = pickedMesh.parent;
+                                        pickedMesh.setParent(motionController.rootMesh);
+                                    }
+                                }
+                            } else {
+                                if (pickedMesh) {
+                                    pickedMesh.setParent(originalParent);
+                                    pickedMesh = null;
+                                }
+                            }
+                        }
+                    });
+                }
 
                 squeezeComponent.onButtonStateChangedObservable.add(() => {
                     if (squeezeComponent.changes.pressed) {
@@ -258,13 +283,17 @@ async function initializeScene() {
                 const leftPosition = leftController.grip.position;
                 const rightPosition = rightController.grip.position;
                 const currentDistance = BABYLON.Vector3.Distance(leftPosition, rightPosition);
-                
                 if (initialDistance && initialScale) {
                     const scaleFactor = currentDistance / initialDistance;
                     pickedMesh.scaling = initialScale.multiply(new BABYLON.Vector3(scaleFactor, scaleFactor, scaleFactor));
                 }
             }
         });
+
+
+
+
+
     });
 
     engine.runRenderLoop(function() {
@@ -276,5 +305,6 @@ async function initializeScene() {
     });
 }
 
-// Call the async function to initialize the scene
 initializeScene();
+
+
