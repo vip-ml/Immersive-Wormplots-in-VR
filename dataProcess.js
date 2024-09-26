@@ -119,11 +119,33 @@ async function initializeScene() {
             groupMeshes[group] = { parentNode, LineSystem, ribbon };
         }
 
-        const colors = {
-            "Control": new BABYLON.Color3(1, 0, 0), // Red
-            "High Dose": new BABYLON.Color3(0, 1, 0), // Green
-            "Low Dose": new BABYLON.Color3(0, 0, 1) // Blue
-        };
+        // const colors = {
+        //     "Control": new BABYLON.Color3(1, 0, 0), // Red
+        //     "High Dose": new BABYLON.Color3(0, 1, 0), // Green
+        //     "Low Dose": new BABYLON.Color3(0, 0, 1) // Blue
+        // };
+
+
+
+
+        // Function to generate a random color
+        function getRandomColor() {
+            return new BABYLON.Color3(
+                Math.random(),
+                Math.random(),
+                Math.random()
+            );
+        }
+
+        // Create a color map for all groups
+        const colors = {};
+        Groups.forEach(group => {
+            colors[group] = getRandomColor();
+        });
+
+
+
+
 
         allBoxPlotValues.forEach(groupData => {
             connectPoints(groupData.values, scene, colors[groupData.group], groupData.group);
@@ -137,13 +159,24 @@ async function initializeScene() {
             }
         }
 
+        // window.addEventListener("keydown", function(event) {
+        //     if (event.key === "1") {
+        //         toggleVisibility("Control");
+        //     } else if (event.key === "2") {
+        //         toggleVisibility("Low Dose");
+        //     } else if (event.key === "3") {
+        //         toggleVisibility("High Dose");
+        //     }
+        // });
+        
+        
+        const maxGroups = Math.min(Groups.length, 10);
+
         window.addEventListener("keydown", function(event) {
-            if (event.key === "1") {
-                toggleVisibility("Control");
-            } else if (event.key === "2") {
-                toggleVisibility("Low Dose");
-            } else if (event.key === "3") {
-                toggleVisibility("High Dose");
+            const keyNumber = parseInt(event.key);
+            if (!isNaN(keyNumber) && keyNumber >= 0 && keyNumber < maxGroups) {
+                const groupToToggle = Groups[keyNumber];
+                toggleVisibility(groupToToggle);
             }
         });
 
