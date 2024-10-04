@@ -211,15 +211,7 @@ async function initializeScene() {
                     triggerComponent.onButtonStateChangedObservable.add(() => {
                         if (triggerComponent.changes.pressed) {
                             if (triggerComponent.pressed) {
-                                if (!isPanelVisible) {
-                                    const ray = controller.getWorldPointerRayToRef(new BABYLON.Ray());
-                                    const hit = scene.pickWithRay(ray);
-                                    if (hit.pickedMesh && hit.pickedMesh.parent instanceof BABYLON.GUI.HolographicButton) {
-                                        const button = hit.pickedMesh.parent;
-                                        console.log("Button selected:", button.text);
-                                        toggleVisibility(button.text);
-                                    }
-                                } else {
+                     
                                     let mesh = scene.meshUnderPointer;
                                     if (xrHelper.pointerSelection.getMeshUnderPointer) {
                                         mesh = xrHelper.pointerSelection.getMeshUnderPointer(controller.uniqueId);
@@ -237,7 +229,7 @@ async function initializeScene() {
                                         originalParent = pickedMesh.parent;
                                         pickedMesh.setParent(motionController.rootMesh);
                                     }
-                                }
+                                
                             } else {
                                 if (pickedMesh) {
                                     pickedMesh.setParent(originalParent);
